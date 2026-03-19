@@ -3,9 +3,10 @@ import logging
 import os
 from logging.handlers import RotatingFileHandler
 
-os.makedirs("data", exist_ok=True)
-LOG_FILE = "data/runtime.log"
-DEBUG_LOG_FILE = "data/debug.log"
+# 🌟 核心修改：将日志目录转移到 tmp 下，利用 Docker 映射到宿主机内存/临时盘
+os.makedirs("tmp", exist_ok=True)
+LOG_FILE = "tmp/runtime.log"
+DEBUG_LOG_FILE = "tmp/debug.log"
 
 class ColoredFormatter(logging.Formatter):
     COLORS = {

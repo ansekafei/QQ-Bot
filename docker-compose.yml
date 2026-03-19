@@ -18,7 +18,7 @@ services:
       
     volumes:
       - .:/app
-      - /tmp/bot:/app/tmp
+      - /tmp/bot:/tmp/bot
     networks:
       - ai-net
       
