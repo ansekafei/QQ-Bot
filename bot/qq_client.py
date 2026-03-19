@@ -3,6 +3,8 @@ import asyncio
 import json
 import re
 import websockets
+import hashlib
+import time
 from datetime import datetime
 
 from core.config import cfg
@@ -15,6 +17,8 @@ from bot.tools.sticker_manager import sticker_manager
 
 user_buffers = {}
 ws_connection = None
+# 新增：用于防死循环与高频刷屏的消息哈希缓存
+last_msg_cache = {}
 
 async def send_qq_msg(target_id: str, text: str, msg_type: str):
     if not ws_connection:
@@ -81,8 +85,12 @@ async def process_buffer(session_id: str, user_id: str, msg_type: str, target_id
         reply, sticker_tags, final_bubbles = await brain.generate_reply(current_history, "")
         
         for i, para in enumerate(final_bubbles):
-            typing_time = min(len(para) * 0.35, 10.0)
-            await asyncio.sleep(typing_time)
+            # 修复点（顺带处理了新发现的问题2，见下文）：排除 CQ 码长度对打字延迟的干扰
+            clean_para_for_length = re.sub(r'\[CQ:.*?\]', '', para)
+            typing_time = min(len(clean_para_for_length) * 0.35, 10.0)
+            if typing_time > 0:
+                await asyncio.sleep(typing_time)
+            
             await send_qq_msg(target_id, para, msg_type)
             if i < len(final_bubbles) - 1:
                 await asyncio.sleep(2.0)
@@ -111,10 +119,28 @@ async def handle_incoming_message(msg: dict):
     if not text: 
         return
         
-    # 🌟 核心修复：死循环克星！直接在最外层拦截 QQ 自动回复
-    if text.startswith("[自动回复]") or text.startswith("&#91;自动回复&#93;"):
-        logger.warning(f"🚫 拦截到来自 {user_id} 的自动回复，已丢弃，防止死循环导致 AI 崩溃。")
+    # 🌟 优化修复：更智能的防死循环机制
+    # 1. 灵活正则匹配各种常见自动回复前缀
+    if re.search(r'^[\【\[<&#91;]*(自动回复|不在电脑前|机器人)[\】\]>&#93;]*', text, re.IGNORECASE):
+        logger.warning(f"🚫 拦截到来自 {user_id} 的疑似自动回复，已丢弃。")
         return
+
+    # 2. 短期高频相同消息去重拦截（防其它Bot死循环）
+    current_time = time.time()
+    msg_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+    cache_key = f"{user_id}_{msg_hash}"
+    
+    if cache_key in last_msg_cache:
+        last_time = last_msg_cache[cache_key]
+        if current_time - last_time < 3.0:  # 3秒内收到完全一样的文本，判定为异常循环
+            logger.warning(f"🚫 拦截到高频重复消息，疑似循环回音，已丢弃。")
+            return
+    last_msg_cache[cache_key] = current_time
+    
+    # 顺手清理过期缓存（超过60秒的记录）
+    expired_keys = [k for k, v in last_msg_cache.items() if current_time - v > 60]
+    for k in expired_keys:
+        del last_msg_cache[k]
         
     image_match = re.search(r'\[CQ:image,(.*?)\]', text)
     if image_match:
@@ -144,7 +170,8 @@ async def handle_incoming_message(msg: dict):
 
     if session_id in user_buffers:
         user_buffers[session_id]['texts'].append(text)
-        user_buffers[session_id]['task'].cancel()
+        if not user_buffers[session_id]['task'].done():
+            user_buffers[session_id]['task'].cancel()
     else:
         user_buffers[session_id] = {'texts': [text]}
         
