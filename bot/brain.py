@@ -5,7 +5,6 @@ import asyncio
 import urllib.parse
 from datetime import datetime
 from openai import AsyncOpenAI
-import httpx
 
 from core.config import cfg
 from core.logger import logger
@@ -31,7 +30,6 @@ class BotBrain:
         if base_url and not base_url.endswith('/'):
             base_url += '/'
         
-        # 🌟 核心修改：移除所有复杂的网络代理判断，清爽直连你的本地网关
         current_config = (base_url, api_key)
         if self._clients[gateway_index] is None or self._config_caches[gateway_index] != current_config:
             self._clients[gateway_index] = AsyncOpenAI(api_key=api_key, base_url=base_url)
@@ -74,40 +72,30 @@ class BotBrain:
                 return True, "当前空闲，允许秒回", 0.0
                 
         except Exception as e:
-            logger.error(f"⚠️ 裁判模块网络或请求异常，已自动降级放行: {repr(e)}")
+            logger.error(f"⚠️ 裁判模块异常，降级放行: {repr(e)}")
             return True, "报错降级放行", 0.0
 
     async def generate_reply(self, current_history: list, system_prompt_addon: str):
         client = self.get_client(cfg.get("chat_gateway", 1))
         active_prompt_name = cfg.get("active_prompt", "default.txt")
-        logger.info(f"🎭 引擎开始构思，当前加载的角色卡协议: [{active_prompt_name}]")
+        logger.info(f"🎭 引擎开始构思，协议: [{active_prompt_name}]")
         
-        dynamic_prompt = await memory_manager.load_active_prompt() + f"\n\n【当前真实时间】：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')} (你必须严格处于这个时间点！绝对不要预知未来！)"
+        dynamic_prompt = await memory_manager.load_active_prompt() + f"\n\n【当前真实时间】：{datetime.now().strftime('%Y年%m月%d日 %H:%M:%S')}"
         
         core_mem = await memory_manager.load_core_memory()
         if core_mem and "暂无核心" not in core_mem: dynamic_prompt += f"\n\n【核心记忆】\n{core_mem}"
-        dynamic_prompt += f"\n\n【近期生活轨迹记忆表】\n{await schedule_manager.get_recent_table_md()}"
+        dynamic_prompt += f"\n\n【近期轨迹】\n{await schedule_manager.get_recent_table_md()}"
         
         daily_schedule = await schedule_manager.get_todays_schedule()
         if daily_schedule: 
-            dynamic_prompt += f"\n\n【今日日记参考 (仅供背景参考，绝对不要按时间戳一条条复述！)】\n{daily_schedule}"
+            dynamic_prompt += f"\n\n【今日日记参考】\n{daily_schedule}"
 
-        dynamic_prompt += "\n\n【绝对输出规则 (违反将遭到惩罚)】："
-        dynamic_prompt += "\n1. 你必须严格身处【当前真实时间】，只准回复当下这1分钟内该说的话！绝对禁止给自己加未来的时间戳！绝对禁止提前演绎未来的剧情！"
-        dynamic_prompt += "\n2. 你是在用微信/QQ聊天，不是在写小说！每次回复必须极其简短，最多不能超过4句话！绝对禁止长篇大论或自言自语！"
-
-        dynamic_prompt += "\n\n【特殊内置指令】：如果你达成了约定，请输出 `[RECORD_PROMISE: 周末一起去看电影]` 标签！"
-        dynamic_prompt += "\n【内置视觉能力】：当你正经历特殊时刻（如看风景、吃美食、换新衣服等），你可以自然地在聊天中提到你要给对方发一张照片或分享画面。系统的辅助裁判模型会自动捕捉你的意图并为你附上照片。绝对不要向用户输出任何生图提示词或英文描述！"
-        
+        dynamic_prompt += "\n\n【绝对输出规则】：\n1. 严格处于当前真实时间，禁预知未来！\n2. 聊天必须简短，最多不超过4句话！"
+        dynamic_prompt += "\n\n【特殊内置指令】：如果达成约定，输出 `[RECORD_PROMISE: 事件]` ！"
         dynamic_prompt += await sticker_manager.get_system_prompt_addon()
         dynamic_prompt += get_tool_prompt() + system_prompt_addon
 
         messages = [{"role": "system", "content": dynamic_prompt}] + current_history
-
-        logger.debug("="*60)
-        logger.debug(f"📤 [主脑 LLM 请求] 网关: {cfg.get('chat_gateway', 1)} | 模型: {cfg.get('chat_model')}")
-        logger.debug(f"📤 [请求 Context 负载]:\n{json.dumps(messages, ensure_ascii=False, indent=2)}")
-        logger.debug("="*60)
 
         try:
             response = await client.chat.completions.create(
@@ -119,17 +107,23 @@ class BotBrain:
             
             raw_reply = response.choices[0].message.content
             reply_text = raw_reply if raw_reply else "..."
-            
-            logger.debug("="*60)
-            logger.debug(f"📥 [主脑 LLM 响应内容]:\n{reply_text}")
-            logger.debug("="*60)
     
-            search_match = re.search(r'\[SEARCH:\s*(.*?)\]', reply_text)
-            if search_match:
-                search_result = await execute_search(search_match.group(1).strip())
-                messages.extend([{"role": "assistant", "content": reply_text}, {"role": "system", "content": search_result + "\n\n请根据结果直接回答，勿重复 SEARCH。"}])
+            # 🌟 核心修复：引入 While 循环，支持一次聊天中发起多次查询/多维检索（最多允许深挖3次防止死循环）
+            search_depth = 0
+            while search_depth < 3:
+                search_match = re.search(r'\[SEARCH:\s*(.*?)\]', reply_text)
+                if not search_match:
+                    break
+                    
+                search_query = search_match.group(1).strip()
+                logger.info(f"🔍 [主脑工具调用] 正在搜索: {search_query}")
+                search_result = await execute_search(search_query)
                 
-                logger.debug(f"📤 [搜索后追问请求] 携带了搜索上下文...")
+                messages.extend([
+                    {"role": "assistant", "content": reply_text}, 
+                    {"role": "system", "content": f"关于 '{search_query}' 的搜索结果:\n{search_result}\n\n请根据结果直接回答，不要重复触发该 SEARCH。"}
+                ])
+                
                 response = await client.chat.completions.create(
                     model=cfg.get("chat_model"), 
                     messages=messages, 
@@ -138,7 +132,7 @@ class BotBrain:
                 )
                 raw_reply_2 = response.choices[0].message.content
                 reply_text = raw_reply_2 if raw_reply_2 else "..."
-                logger.debug(f"📥 [搜索后追问响应]:\n{reply_text}")
+                search_depth += 1
     
             promise_matches = re.findall(r'\[RECORD_PROMISE:\s*(.*?)\]', reply_text)
             for promise in promise_matches:
@@ -148,26 +142,19 @@ class BotBrain:
             sticker_tags = re.findall(r'\[表情包:(.*?)\]', clean_reply)
             clean_reply = re.sub(r'\[表情包:.*?\]', '', clean_reply).strip()
             clean_reply = re.sub(r'\[\d{2}-\d{2}\s\d{2}:\d{2}\]\s*', '', clean_reply).strip()
+            clean_reply = re.sub(r'\[SEARCH:.*?\]', '', clean_reply).strip()
             
             clean_reply = re.sub(r'\[PHOTO_GENERATION_PROMPT:.*?\]', '', clean_reply, flags=re.IGNORECASE|re.DOTALL).strip()
             clean_reply = re.sub(r'\[IMAGE:.*?\]', '', clean_reply, flags=re.IGNORECASE|re.DOTALL).strip()
             clean_reply = re.sub(r'\[视觉能力触发\]|\[发送照片\]|\[系统提示.*?\]', '', clean_reply).strip()
-            clean_reply = re.sub(r'\(没有回复\)|（没有回复）', '', clean_reply).strip()
             
             image_cq_code = ""
             try:
                 judge_client = self.get_client(cfg.get("summary_gateway", 1))
-                image_judge_prompt = f"""你是一个专门负责“AI伴侣视觉输出”的严格裁判。
-【AI 刚才准备发送的回复】：{reply_text}
-【当前的活动日程】：{daily_schedule if daily_schedule else '暂无'}
-
-【核心判断原则】：
-1. 触发条件：当 AI 的回复中**明确同意**发照片，**或者**包含类似“[视觉能力触发]”、“[发送照片]”等标签时，视为需要配图。
-2. ⚠️ 一票否决：如果 AI 是在**拒绝**，或者纯文字描述动作，你必须立刻输出 [NO]。
-
-如果审核通过，请结合上下文构思一张极具生活感的日常随拍。
-请严格独立一行输出：[IMAGE: 画面主体描述, 穿搭细节, 场景环境, 写实摄影风格]
-如果不符合发图条件，请直接且只输出：[NO]"""
+                image_judge_prompt = f"""你是一个配图裁判。
+【AI准备发送的回复】：{reply_text}
+如果回复同意发照片，输出独立一行: [IMAGE: 画面主体描述, 穿搭细节, 环境, 摄影风格]
+如果不符合，只输出: [NO]"""
                 
                 judge_resp = await judge_client.chat.completions.create(
                     model=cfg.get("summary_model"),
@@ -180,13 +167,12 @@ class BotBrain:
                 
                 img_match = re.search(r'\[IMAGE:\s*(.*?)\]', judge_ans)
                 if img_match:
-                    photo_prompt = img_match.group(1).strip()
-                    logger.info(f"📸 [配图裁判] 审核通过！拉起生图引擎: {photo_prompt}")
                     from bot.tools.image_generator import image_generator
-                    image_cq_code = await image_generator.generate_life_photo(photo_prompt)
+                    image_cq_code = await image_generator.generate_life_photo(img_match.group(1).strip())
             except Exception as e:
                 logger.error(f"⚠️ [配图裁判] 异常: {e}")
             
+            # 注：打断施法前，已经将完整的原始构思写入了记忆，这样下次 AI 依然知道自己刚刚其实想完整表达什么，符合人类自然对话逻辑
             await memory_manager.append_memory("assistant", f"[{datetime.now().strftime('%m-%d %H:%M')}] {clean_reply}")
     
             raw_paras = re.split(r'\n+', clean_reply)

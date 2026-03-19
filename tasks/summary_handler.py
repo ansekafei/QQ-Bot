@@ -12,7 +12,6 @@ async def summarize_memory_async():
         from bot.brain import brain
         client = brain.get_client()
         
-        # 1. 加载当前的短期记忆和旧的核心记忆
         history = await memory_manager.load_history()
         if not history or len(history) < 2:
             return False, "当前记忆太少，无需总结"
@@ -21,14 +20,10 @@ async def summarize_memory_async():
         if old_core_memory == "暂无核心记忆。":
             old_core_memory = ""
             
-        # 将历史记录转换为文本格式供 AI 阅读
         history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
-        
-        # 2. 获取当前时间（让 AI 具备时间流逝的概念）
         current_time_str = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
-        
-        # 3. 构建总结 Prompt（新增动态清理规则）
         summary_model = cfg.get("summary_model")
+        
         sys_prompt = (
             "你是一个机器人的“后台记忆整理大脑”。\n"
             "你的任务是阅读用户与角色最近的聊天记录，并将其提炼浓缩，更新角色的【核心记忆档案】。\n\n"
@@ -46,27 +41,27 @@ async def summarize_memory_async():
             f"【本次需要总结的新聊天记录】：\n{history_text}"
         )
 
-        # 4. 请求 LLM 进行总结
         response = await client.chat.completions.create(
             model=summary_model,
             messages=[
                 {"role": "system", "content": sys_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            temperature=0.2, # 温度调低，保证总结和清理的客观准确性
+            temperature=0.2, 
             timeout=60.0
         )
         
         new_core_memory = response.choices[0].message.content.strip()
-        
-        # 强力清洗：去除模型可能返回的 ``` 标记
         new_core_memory = new_core_memory.replace('```json', '').replace('```text', '').replace('```', '').strip()
         
-        # 5. 保存新核心记忆，并清空短期记忆
+        # 🌟 核心修复：保存核心记忆后，不直接清空，而是保留最后 20 条，防止当前话题突然失忆
         await memory_manager.save_core_memory(new_core_memory)
-        await memory_manager.save_history([]) 
         
-        logger.info("🧠 [记忆系统] 记忆总结与过期事件清理完成！短期对话池已清空。")
+        retain_history = history[-20:] if len(history) > 20 else []
+        async with memory_manager._lock:
+            await memory_manager.save_history(retain_history) 
+        
+        logger.info("🧠 [记忆系统] 总结与过期事件清理完成！保留了最后 20 条近期对话。")
         return True, "短期记忆总结成功，过期事件已自动清理。"
         
     except Exception as e:

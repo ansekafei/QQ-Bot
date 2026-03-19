@@ -17,7 +17,6 @@ from bot.tools.sticker_manager import sticker_manager
 
 user_buffers = {}
 ws_connection = None
-# 新增：用于防死循环与高频刷屏的消息哈希缓存
 last_msg_cache = {}
 
 async def send_qq_msg(target_id: str, text: str, msg_type: str):
@@ -29,7 +28,6 @@ async def send_qq_msg(target_id: str, text: str, msg_type: str):
     try:
         numeric_id = int(target_id)
     except ValueError:
-        logger.error(f"❌ 非法目标 ID，已阻断: {target_id}")
         return
 
     payload = {
@@ -41,7 +39,7 @@ async def send_qq_msg(target_id: str, text: str, msg_type: str):
         await ws_connection.send(json.dumps(payload))
         logger.info(f"📤 气泡推流 -> [{target_id}] 内容: {text}")
     except Exception as e:
-        logger.error(f"❌ WebSocket 发送消息底层崩溃: {e}")
+        logger.error(f"❌ WebSocket 发送崩溃: {e}")
 
 async def process_buffer(session_id: str, user_id: str, msg_type: str, target_id: str):
     try:
@@ -85,22 +83,52 @@ async def process_buffer(session_id: str, user_id: str, msg_type: str, target_id
         reply, sticker_tags, final_bubbles = await brain.generate_reply(current_history, "")
         
         for i, para in enumerate(final_bubbles):
-            # 修复点（顺带处理了新发现的问题2，见下文）：排除 CQ 码长度对打字延迟的干扰
+            # 🌟 核心打断逻辑：只要用户又发了消息，缓冲池会重新出现该 session_id
+            if session_id in user_buffers:
+                logger.warning(f"[{session_id}] ⚠️ 气泡输出被用户新消息打断！剩余 {len(final_bubbles)-i} 条取消发送。")
+                break
+                
             clean_para_for_length = re.sub(r'\[CQ:.*?\]', '', para)
             typing_time = min(len(clean_para_for_length) * 0.35, 10.0)
-            if typing_time > 0:
-                await asyncio.sleep(typing_time)
             
-            await send_qq_msg(target_id, para, msg_type)
-            if i < len(final_bubbles) - 1:
-                await asyncio.sleep(2.0)
+            # 分段睡眠，实现打字期间的极速打断响应
+            interrupted = False
+            for _ in range(int(typing_time / 0.5)):
+                if session_id in user_buffers:
+                    interrupted = True
+                    break
+                await asyncio.sleep(0.5)
+                
+            if not interrupted and (typing_time % 0.5) > 0:
+                await asyncio.sleep(typing_time % 0.5)
+                if session_id in user_buffers: interrupted = True
+                
+            if interrupted:
+                logger.warning(f"[{session_id}] ⚠️ 正在模拟打字时被用户打断！")
+                break
 
-        for tag in sticker_tags:
-            cq_sticker = await sticker_manager.get_sticker_id(tag)
-            if cq_sticker:
-                await asyncio.sleep(2.5)
-                await send_qq_msg(target_id, cq_sticker, msg_type)
-                logger.info(f"✅ 发送QQ表情包: [{tag}]")
+            await send_qq_msg(target_id, para, msg_type)
+            
+            # 发完一句后的停顿也是可以被打断的
+            if i < len(final_bubbles) - 1:
+                interrupted = False
+                for _ in range(4): # 间隔 2.0s
+                    if session_id in user_buffers:
+                        interrupted = True
+                        break
+                    await asyncio.sleep(0.5)
+                if interrupted:
+                    logger.warning(f"[{session_id}] ⚠️ 气泡间隙被用户打断！")
+                    break
+
+        # 如果没有被打断，才发表情包
+        if session_id not in user_buffers:
+            for tag in sticker_tags:
+                cq_sticker = await sticker_manager.get_sticker_id(tag)
+                if cq_sticker:
+                    await asyncio.sleep(2.5)
+                    await send_qq_msg(target_id, cq_sticker, msg_type)
+                    logger.info(f"✅ 发送QQ表情包: [{tag}]")
         
         proactive_manager.update_interaction_time()
         
@@ -119,47 +147,33 @@ async def handle_incoming_message(msg: dict):
     if not text: 
         return
         
-    # 🌟 优化修复：更智能的防死循环机制
-    # 1. 灵活正则匹配各种常见自动回复前缀
     if re.search(r'^[\【\[<&#91;]*(自动回复|不在电脑前|机器人)[\】\]>&#93;]*', text, re.IGNORECASE):
-        logger.warning(f"🚫 拦截到来自 {user_id} 的疑似自动回复，已丢弃。")
         return
 
-    # 2. 短期高频相同消息去重拦截（防其它Bot死循环）
     current_time = time.time()
     msg_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
     cache_key = f"{user_id}_{msg_hash}"
-    
-    if cache_key in last_msg_cache:
-        last_time = last_msg_cache[cache_key]
-        if current_time - last_time < 3.0:  # 3秒内收到完全一样的文本，判定为异常循环
-            logger.warning(f"🚫 拦截到高频重复消息，疑似循环回音，已丢弃。")
-            return
+    if cache_key in last_msg_cache and current_time - last_msg_cache[cache_key] < 3.0:
+        return
     last_msg_cache[cache_key] = current_time
-    
-    # 顺手清理过期缓存（超过60秒的记录）
     expired_keys = [k for k, v in last_msg_cache.items() if current_time - v > 60]
-    for k in expired_keys:
-        del last_msg_cache[k]
+    for k in expired_keys: del last_msg_cache[k]
         
     image_match = re.search(r'\[CQ:image,(.*?)\]', text)
     if image_match:
         attrs = image_match.group(1)
         url_match = re.search(r'url=(https?://[^,\]]+)', attrs)
-        file_match = re.search(r'file=([^,\]]+)', attrs)
-        
         if url_match:
             image_url = url_match.group(1)
+            file_match = re.search(r'file=([^,\]]+)', attrs)
             file_id = file_match.group(1) if file_match else None
             user_text = re.sub(r'\[CQ:image.*?\]', '', text).strip()
-            logger.info("🖼️ 拦截到图片消息，正在提交给视觉引擎分析...")
             text = await analyze_qq_image(image_url, user_text, file_id)
 
     logger.info(f"📩 [{msg_type}] {user_id}: {text[:50]}")
     
     allowed_users = cfg.get("allowed_users", "").split(",")
     allowed_groups = cfg.get("allowed_groups", "").split(",")
-    
     if msg_type == "private" and allowed_users[0] and user_id not in allowed_users: return
     if msg_type == "group":
         group_id = str(msg.get("group_id"))
@@ -198,6 +212,6 @@ async def start_bot():
             ws_connection = None
             await asyncio.sleep(10)
         except Exception as e:
-            logger.error(f"❌ WebSocket 连接断开或异常: {e}，10秒后重试...")
+            logger.error(f"❌ WebSocket 异常: {e}，10秒后重试...")
             ws_connection = None
             await asyncio.sleep(10)
