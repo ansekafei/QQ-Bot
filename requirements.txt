@@ -1,0 +1,8 @@
+websockets==12.0
+openai==1.14.0
+httpx==0.27.0
+Pillow==10.2.0
+# 以下是新增的单进程异步与Web支持库：
+fastapi
+uvicorn
+aiofiles

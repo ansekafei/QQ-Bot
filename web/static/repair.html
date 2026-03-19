@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>🚨 灾难救援模式 - 纯净 IDE</title>
+    <style>
+        body { margin: 0; padding: 20px; background-color: #1e1e1e; color: #d4d4d4; font-family: sans-serif; height: 100vh; box-sizing: border-box; display: flex; flex-direction: column; }
+        .header { background: #d32f2f; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; font-weight: bold; flex-shrink: 0; }
+        .ide-container { display: flex; flex: 1; gap: 15px; min-height: 0; }
+        .file-tree { width: 250px; background: #252526; border: 1px solid #3e3e42; padding: 10px; overflow-y: auto; border-radius: 4px; font-family: monospace; font-size: 13px; }
+        .tree-folder { cursor: pointer; color: #dcdcaa; padding: 4px 0; user-select: none; }
+        .tree-folder::before { content: '▶ '; font-size: 10px; color: #888; display: inline-block; width: 15px;}
+        .tree-folder.open::before { content: '▼ '; }
+        .tree-file { cursor: pointer; color: #ce9178; padding: 4px 0 4px 20px; }
+        .tree-file:hover, .tree-folder:hover { background: #37373d; }
+        .tree-file.selected { background: #094771; color: #fff; }
+        .tree-children { display: none; padding-left: 15px; border-left: 1px dotted #444; margin-left: 5px; }
+        .tree-children.open { display: block; }
+        textarea { width: 100%; flex: 1; background: #181818; color: #d4d4d4; border: 1px solid #3e3e42; padding: 15px; border-radius: 4px; font-family: Consolas, monospace; font-size: 14px; resize: none; }
+        button { background: #007acc; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; }
+        button:hover { background: #0098ff; }
+        .danger-btn { background: #d32f2f; }
+        .success-msg { color: #4caf50; opacity: 0; transition: 0.3s; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        🚨 灾难救援模式已激活：主系统界面可能已损坏，您目前处于纯净代码编辑器模式。请在此修复受损文件。
+    </div>
+    
+    <div class="ide-container">
+        <div class="file-tree" id="file-tree-container">加载目录树中...</div>
+        <div style="flex: 1; display: flex; flex-direction: column;">
+            <div style="margin-bottom: 10px; font-family: monospace; display: flex; justify-content: space-between; align-items: center;">
+                <div>当前抢救文件: <span id="current-edit-file" style="color: #e6a23c; font-weight: bold;">未选择</span></div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="createNewFile()" style="padding: 5px 10px; font-size: 12px; background-color: #007acc; margin: 0;">➕ 新建文件</button>
+                    <button onclick="loadFileTree()" style="padding: 5px 10px; font-size: 12px; background-color: #555; margin: 0;">刷新目录</button>
+                </div>
+            </div>
+            <textarea id="code-editor-area" spellcheck="false"></textarea>
+            <div style="margin-top: 15px; flex-shrink: 0;">
+                <button onclick="saveFile(false)" style="background-color: #28a745;">💾 保存修复</button>
+                <button onclick="saveFile(true)" class="danger-btn">🚀 保存并热重启引擎</button>
+                <button onclick="window.location.href='/'" style="background-color: #555;">🔙 尝试返回主系统</button>
+                <span id="editor-status" class="success-msg">文件已保存！</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.currentSelectedFile = "";
+
+        // 🌟 新增：处理新建文件
+        async function createNewFile() {
+            const filepath = prompt("请输入要新建的文件路径\n(如: bot/tools/new_script.py):");
+            if(!filepath) return;
+            
+            try {
+                const res = await fetch('/create_file', { method: 'POST', body: JSON.stringify({filename: filepath}) });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    alert("文件创建成功！");
+                    await loadFileTree();
+                    window.currentSelectedFile = filepath;
+                    document.getElementById('current-edit-file').textContent = filepath;
+                    document.getElementById('code-editor-area').value = "";
+                } else {
+                    alert("创建失败：" + data.msg);
+                }
+            } catch (e) { alert("网络请求异常"); }
+        }
+
+        async function loadFileTree() {
+            try {
+                const res = await fetch('/files_list');
+                const data = await res.json();
+                renderFileTree(data.files);
+            } catch (e) { document.getElementById('file-tree-container').innerText = '读取失败: ' + e; }
+        }
+
+        function renderFileTree(files) {
+            const container = document.getElementById('file-tree-container');
+            container.innerHTML = '';
+            const root = {};
+            files.forEach(file => {
+                const parts = file.split('/');
+                let current = root;
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (!current[part]) current[part] = (i === parts.length - 1) ? { __path: file } : {};
+                    current = current[part];
+                }
+            });
+
+            function buildDOM(node, parentEl) {
+                const keys = Object.keys(node).filter(k => k !== '__path').sort((a, b) => {
+                    const aIsDir = !node[a].__path; const bIsDir = !node[b].__path;
+                    if (aIsDir === bIsDir) return a.localeCompare(b);
+                    return aIsDir ? -1 : 1;
+                });
+                keys.forEach(key => {
+                    const childNode = node[key];
+                    if (childNode.__path) {
+                        const fileEl = document.createElement('div');
+                        fileEl.className = 'tree-file'; fileEl.textContent = '📄 ' + key;
+                        fileEl.onclick = () => {
+                            document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
+                            fileEl.classList.add('selected');
+                            window.currentSelectedFile = childNode.__path;
+                            document.getElementById('current-edit-file').textContent = childNode.__path;
+                            loadFileContent(childNode.__path);
+                        };
+                        parentEl.appendChild(fileEl);
+                    } else {
+                        const folderContainer = document.createElement('div');
+                        const folderLabel = document.createElement('div');
+                        folderLabel.className = 'tree-folder'; folderLabel.textContent = '📁 ' + key;
+                        const childrenContainer = document.createElement('div');
+                        childrenContainer.className = 'tree-children';
+                        folderLabel.onclick = () => { folderLabel.classList.toggle('open'); childrenContainer.classList.toggle('open'); };
+                        folderContainer.appendChild(folderLabel); folderContainer.appendChild(childrenContainer);
+                        parentEl.appendChild(folderContainer);
+                        buildDOM(childNode, childrenContainer);
+                    }
+                });
+            }
+            buildDOM(root, container);
+        }
+
+        async function loadFileContent(filename) {
+            const editor = document.getElementById('code-editor-area');
+            try {
+                const res = await fetch('/read_file', { method: 'POST', body: JSON.stringify({filename: filename}) });
+                const data = await res.json();
+                if(data.status === 'success') editor.value = data.content; else alert("读取失败：" + data.msg);
+            } catch (e) { }
+        }
+
+        async function saveFile(restart) {
+            const filename = window.currentSelectedFile;
+            if(!filename) return alert("请在左侧选择文件！");
+            const content = document.getElementById('code-editor-area').value;
+            try {
+                const res = await fetch('/save_file', { method: 'POST', body: JSON.stringify({filename: filename, content: content}) });
+                const data = await res.json();
+                if(data.status === 'success') {
+                    const statusEl = document.getElementById('editor-status');
+                    statusEl.style.opacity = '1';
+                    if(restart) {
+                        statusEl.textContent = "重启指令已发送..."; await fetch('/restart', { method: 'POST' });
+                        setTimeout(() => location.reload(), 3000);
+                    } else {
+                        setTimeout(() => statusEl.style.opacity = '0', 3000);
+                    }
+                } else alert("保存失败：" + data.msg);
+            } catch (e) { }
+        }
+
+        document.getElementById('code-editor-area').addEventListener('keydown', function(e) {
+            if (e.key == 'Tab') { e.preventDefault(); var start = this.selectionStart; var end = this.selectionEnd; this.value = this.value.substring(0, start) + "    " + this.value.substring(end); this.selectionStart = this.selectionEnd = start + 4; }
+        });
+        
+        window.onload = loadFileTree;
+    </script>
+</body>
+</html>

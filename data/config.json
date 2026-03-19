@@ -1,0 +1,22 @@
+{
+    "chat_model": "Gemini-2.5-PRO",
+    "summary_model": "Gemini-3-flash-preview",
+    "vision_model": "Gemini-3-flash-preview",
+    "allowed_users": "2751345181",
+    "allowed_groups": "0",
+    "proactive_enabled": true,
+    "proactive_min_hours": 4.0,
+    "proactive_max_hours": 8.0,
+    "dnd_start_time": "23:00",
+    "dnd_end_time": "08:00",
+    "listen_timeout": 12.0,
+    "judge_enabled": true,
+    "active_prompt": "ZQX",
+    "image_model": "grok-imagine-1.0",
+    "image_edit_model": "grok-imagine-1.0-edit",
+    "chat_gateway": 1,
+    "summary_gateway": 1,
+    "vision_gateway": 1,
+    "image_gateway": 2,
+    "image_edit_gateway": 2
+}

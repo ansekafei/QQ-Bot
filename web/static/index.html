@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>AI 伴侣 - 控制中心</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="toast-container"></div>
+
+    <div class="sidebar" id="app-sidebar">
+        <div class="sidebar-header">
+            <span class="logo-text">控制中心</span>
+            <button class="toggle-btn" onclick="toggleSidebar()" title="收起/展开侧边栏">☰</button>
+        </div>
+        <div class="nav-item active" onclick="switchTab('logs_tab')" title="运行日志"><span class="icon">LG</span><span class="text">运行日志</span></div>
+        <div class="nav-item" onclick="switchTab('listen_scope')" title="监听范围"><span class="icon">LS</span><span class="text">监听范围</span></div>
+        <div class="nav-item" onclick="switchTab('dashboard')" title="基础配置"><span class="icon">CF</span><span class="text">基础配置</span></div>
+        <div class="nav-item" onclick="switchTab('schedule')" title="结构化记忆表"><span class="icon">SC</span><span class="text">结构化记忆表</span></div>
+        <div class="nav-item" onclick="switchTab('proactive')" title="主动搭话"><span class="icon">PR</span><span class="text">主动搭话</span></div>
+        <div class="nav-item" onclick="switchTab('stickers')" title="表情包图鉴"><span class="icon">ST</span><span class="text">表情包图鉴</span></div>
+        <div class="nav-item" onclick="switchTab('code_editor')" title="在线代码编辑"><span class="icon">ID</span><span class="text">在线代码编辑</span></div>
+        <div class="nav-item" onclick="switchTab('character')" title="角色卡设定"><span class="icon">CH</span><span class="text">角色卡设定</span></div>
+        <div class="nav-item" onclick="switchTab('memory')" title="记忆管理体系"><span class="icon">ME</span><span class="text">记忆管理体系</span></div>
+        <div class="nav-item" onclick="switchTab('env_settings')" title="核心通信配置"><span class="icon">NT</span><span class="text">核心通信配置</span></div>
+        <div class="nav-item" onclick="switchTab('git_sync')" title="云同步与灾备"><span class="icon">SY</span><span class="text">云同步与灾备</span></div>
+    </div>
+    
+    <div class="main-content">
+        <div id="logs_tab" class="tab-pane active">
+            <div class="panel" style="height: calc(100vh - 80px); display: flex; flex-direction: column; box-sizing: border-box; margin-bottom: 0;">
+                <h3 style="flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <span>实时运行日志 <span style="font-size: 12px; color: var(--text-muted); font-weight: normal; margin-left: 10px;">(移入暂停滚动)</span></span>
+                    <div style="font-size: 13px; font-weight: normal; display: flex; gap: 15px; align-items: center; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 6px; border: 1px solid #444;">
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="radio" name="log_mode" value="compact" checked onchange="window.logMode='compact'; forceLoadLogs();"> 精简模式</label>
+                        <label style="cursor: pointer; display: flex; align-items: center; gap: 4px;"><input type="radio" name="log_mode" value="debug" onchange="window.logMode='debug'; forceLoadLogs();"> 完整日志 (Debug)</label>
+                    </div>
+                </h3>
+                <div class="log-box" style="flex: 1; margin: 0;" onmouseenter="window.isHoveringLogs=true" onmouseleave="window.isHoveringLogs=false" ontouchstart="window.isHoveringLogs=true" ontouchend="window.isHoveringLogs=false">
+                    <ul id="logs"></ul>
+                </div>
+            </div>
+        </div>
+
+        <div id="listen_scope" class="tab-pane">
+            <div class="panel">
+                <h3>监听与回复范围控制</h3>
+                <div class="alert-box">工作逻辑： 精确控制机器人会理会哪些人、哪些群。输入框留空代表不限制。<br>开发调试： 如果修 Bug 时不想她乱说话，在群聊白名单填入 0 即可彻底屏蔽所有群聊响应。</div>
+                <div class="config-row"><span class="config-label">私聊专属白名单：</span><input type="text" id="whitelist-users" placeholder="留空则所有人可用，多个用逗号分隔"></div>
+                <div class="config-row"><span class="config-label">群聊专属白名单：</span><input type="text" id="whitelist-groups" placeholder="留空则所有群可用，填 0 可禁言所有群"></div>
+                <button onclick="saveListenTargets()">保存生效</button>
+            </div>
+        </div>
+
+        <div id="dashboard" class="tab-pane">
+            <div class="panel">
+                <h3><span>核心与独立子模型配置</span><button onclick="refreshModelsList(this)" style="background: rgba(255,255,255,0.05); color: #aaa; padding: 6px 12px; border: 1px solid rgba(255,255,255,0.1); width: auto; margin-top: 0;">刷新模型资源池</button></h3>
+                <div class="alert-box">双引擎架构： 您可以将复杂的视觉或生图任务指定分配给备用网关，确保主线聊天网关的高并发与低延迟。</div>
+                
+                <div class="config-row">
+                    <span class="config-label">对话交互主模型：</span>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <select id="chat-gateway-select" style="width: 100px; flex-shrink: 0; border-color: #569cd6;" onchange="updateModelOptions('chat')"><option value="1">网关 1</option><option value="2">网关 2</option></select>
+                        <select id="chat-model-select" style="flex: 1; min-width: 0;"><option>加载中...</option></select>
+                        <button onclick="changeModel('chat')" style="width: auto; margin-top: 0;">应用</button>
+                    </div>
+                </div>
+                <div class="config-row">
+                    <span class="config-label">视觉感知专精模型：</span>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <select id="vision-gateway-select" style="width: 100px; flex-shrink: 0; border-color: #569cd6;" onchange="updateModelOptions('vision')"><option value="1">网关 1</option><option value="2">网关 2</option></select>
+                        <select id="vision-model-select" style="flex: 1; min-width: 0;"><option>加载中...</option></select>
+                        <button onclick="changeModel('vision')" style="width: auto; margin-top: 0;">应用</button>
+                    </div>
+                </div>
+                <div class="config-row">
+                    <span class="config-label">记忆总结专用模型：</span>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <select id="summary-gateway-select" style="width: 100px; flex-shrink: 0; border-color: #569cd6;" onchange="updateModelOptions('summary')"><option value="1">网关 1</option><option value="2">网关 2</option></select>
+                        <select id="summary-model-select" style="flex: 1; min-width: 0;"><option>加载中...</option></select>
+                        <button onclick="changeModel('summary')" style="width: auto; margin-top: 0;">应用</button>
+                    </div>
+                </div>
+                <div class="config-row">
+                    <span class="config-label">视觉输出生成模型：</span>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <select id="image-gateway-select" style="width: 100px; flex-shrink: 0; border-color: #e6a23c;" onchange="updateModelOptions('image')"><option value="1">网关 1</option><option value="2">网关 2</option></select>
+                        <select id="image-model-select" style="flex: 1; min-width: 0;"><option>加载中...</option></select>
+                        <button onclick="changeModel('image')" style="width: auto; margin-top: 0;">应用</button>
+                    </div>
+                </div>
+                <div class="config-row">
+                    <span class="config-label">视觉输出精修模型：</span>
+                    <div style="display: flex; gap: 10px; width: 100%;">
+                        <select id="image_edit-gateway-select" style="width: 100px; flex-shrink: 0; border-color: #e6a23c;" onchange="updateModelOptions('image_edit')"><option value="1">网关 1</option><option value="2">网关 2</option></select>
+                        <select id="image_edit-model-select" style="flex: 1; min-width: 0;"><option>加载中...</option></select>
+                        <button onclick="changeModel('image_edit')" style="width: auto; margin-top: 0;">应用</button>
+                    </div>
+                </div>
+                
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">注：由于不同网关映射的模型能力不同，切换网关后模型列表会动态刷新。</div>
+                
+                <div style="margin-top: 30px; border-top: 1px dashed #444; padding-top: 25px;">
+                    <h3 style="border-bottom: none; margin-bottom: 10px;">倾听倒计时与裁判</h3>
+                    <div class="config-row">
+                        <span class="config-label">消息倾听等待时间：</span>
+                        <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                            <input type="text" id="listen-timeout" style="width: 80px; text-align: center; flex-shrink: 0;" placeholder="8"> 
+                            <span style="color: var(--text-muted); font-size: 13px;">秒 (连发消息打包的等待窗口)</span>
+                        </div>
+                    </div>
+                    <div class="config-row">
+                        <span class="config-label">静默裁判功能：</span>
+                        <select id="judge-enabled"><option value="true">开启智能裁判</option><option value="false">关闭 (逢信必回)</option></select>
+                    </div>
+                    <button onclick="saveListenConfig()">保存倾听规则</button>
+                </div>
+                
+                <div style="margin-top: 30px; border-top: 1px dashed #444; padding-top: 25px;">
+                    <span class="config-label" style="color: var(--warning);">系统高级指令：</span>
+                    <button onclick="standaloneRestart(this)" class="danger-btn">强制热重启</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="schedule" class="tab-pane">
+            <div class="panel">
+                <h3>近期生活轨迹与约定记忆表</h3>
+                <div id="schedule-container" style="margin-top: 20px; overflow-x: auto;">
+                    <div style="padding: 20px; text-align: center; color: var(--text-muted);">加载中...</div>
+                </div>
+                <div class="action-btn-group" style="margin-top: 20px;">
+                    <button onclick="triggerSchedule(this)" class="warning-btn">重新生成日记</button>
+                    <button onclick="triggerCleanPromises(this)" class="danger-btn">清理过期待办</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="proactive" class="tab-pane">
+            <div class="panel">
+                <h3>主动搭话与免打扰设置</h3>
+                <div class="config-row"><span class="config-label">功能总开关：</span><select id="proactive-enabled"><option value="true">开启自动搭话</option><option value="false">关闭</option></select></div>
+                <div class="config-row">
+                    <span class="config-label">随机触发间隔：</span>
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <input type="text" id="proactive-min" style="width: 70px; text-align: center; flex-shrink: 0;" placeholder="8"> 
+                        <span>至</span>
+                        <input type="text" id="proactive-max" style="width: 70px; text-align: center; flex-shrink: 0;" placeholder="16">
+                    </div>
+                </div>
+                <div class="config-row">
+                    <span class="config-label">休眠免打扰时间段：</span>
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <input type="text" id="dnd-start" style="width: 90px; text-align: center; flex-shrink: 0;" placeholder="23:00"> 
+                        <span>至</span>
+                        <input type="text" id="dnd-end" style="width: 90px; text-align: center; flex-shrink: 0;" placeholder="08:00">
+                    </div>
+                </div>
+                <button onclick="saveProactiveConfig()" style="margin-top: 10px;">保存规则并重新排期</button>
+            </div>
+        </div>
+
+        <div id="stickers" class="tab-pane">
+            <div class="panel">
+                <h3>表情包图鉴库</h3>
+                <div id="sticker-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-top: 20px;"><div style="color: var(--text-muted);">加载中...</div></div>
+                <button onclick="loadStickers()" style="margin-top: 20px;">刷新图鉴库</button>
+            </div>
+        </div>
+
+        <div id="code_editor" class="tab-pane">
+            <div class="panel" style="display: flex; flex-direction: column; height: calc(100vh - 80px); box-sizing: border-box; margin-bottom: 0;">
+                <h3 style="flex-shrink: 0;"><span>在线代码调试器</span><button onclick="window.open('/repair', '_blank')" style="background-color: #555; margin: 0; width: auto;">备用救援</button></h3>
+                <div class="ide-container" style="flex: 1; min-height: 0; margin-bottom: 15px;">
+                    <div class="file-tree" id="file-tree-container">加载目录树中...</div>
+                    <div style="flex: 1; display: flex; flex-direction: column;">
+                        <div style="margin-bottom: 10px; color: var(--text-muted); font-size: 13px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                            <div>当前编辑: <span id="current-edit-file" style="color: #fff; font-weight: bold; background: #333; padding: 2px 6px; border-radius: 4px; word-break: break-all;">未选择</span></div>
+                            <div style="display: flex; gap: 8px;"><button onclick="createNewFile()" style="padding: 4px 10px; font-size: 12px; background-color: #007acc; width: auto; margin-top: 0;">新建文件</button><button onclick="loadFileTree()" style="padding: 4px 10px; font-size: 12px; background-color: #555; width: auto; margin-top: 0;">刷新目录</button></div>
+                        </div>
+                        <textarea id="code-editor-area" spellcheck="false" placeholder="请在上方文件树选择要编辑的文件..."></textarea>
+                    </div>
+                </div>
+                
+                <div class="action-btn-group" style="flex-shrink: 0; justify-content: flex-start;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <button onclick="saveFile(false)" style="background-color: var(--success); width: auto;">保存当前文件</button>
+                        <button onclick="saveFile(true)" class="warning-btn" style="width: auto;">保存并热重启</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="env_settings" class="tab-pane">
+            <div class="panel">
+                <h3>核心通信与资源配置</h3>
+                <div class="alert-box">双引擎支持： 您可以挂载两个不同协议、不同代理策略的上游网关。例如：网关1跑内部直连模型，网关2挂全局代理跑墙外多模态模型。</div>
+                
+                <div class="config-row" style="margin-top: 15px;">
+                    <span class="config-label" style="color:#569cd6; font-weight:bold; font-size: 15px; width: 100%;">网关 1 (主渠道)</span>
+                </div>
+                <div class="config-row"><span class="config-label">BASE_URL 1：</span><input type="text" id="env-base-url" placeholder="如 http://new-api:3000/v1"></div>
+                <div class="config-row"><span class="config-label">API_KEY 1：</span><input type="text" id="env-api-key" placeholder="主网关接口的密钥"></div>
+                <div class="config-row" style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px dashed #444;">
+                    <button onclick="testApiConnection(this, 1)" class="test-btn" style="width: 450px;">探测直连状态</button>
+                </div>
+
+                <div class="config-row">
+                    <span class="config-label" style="color:#e6a23c; font-weight:bold; font-size: 15px; width: 100%;">网关 2 (备用通道)</span>
+                </div>
+                <div class="config-row"><span class="config-label">BASE_URL 2：</span><input type="text" id="env-base-url-2" placeholder="如 http://llm-gateway:8000/v2"></div>
+                <div class="config-row"><span class="config-label">API_KEY 2：</span><input type="text" id="env-api-key-2" placeholder="备用网关接口的密钥"></div>
+                <div class="config-row" style="margin-bottom: 30px; padding-bottom: 25px; border-bottom: 1px dashed #444;">
+                    <button onclick="testApiConnection(this, 2)" class="test-btn" style="width: 450px; background-color: #d84315;">探测直连状态</button>
+                </div>
+                
+                <div class="config-row">
+                    <span class="config-label" style="color:#fff; font-weight:bold; font-size: 15px; width: 100%;">机器人底层与通用设置</span>
+                </div>
+                <div class="config-row"><span class="config-label">CQ_WS_URL：</span><input type="text" id="env-cq-ws-url" placeholder="如 ws://napcat:3001"></div>
+                <div class="config-row"><span class="config-label">CQ_TOKEN：</span><input type="text" id="env-cq-token" placeholder="NapCatQQ Token"></div>
+                <div class="config-row"><span class="config-label">SERPAPI_KEY：</span><input type="text" id="env-serpapi-key" placeholder="用于查天气和搜索"></div>
+                
+                <div class="config-row"><span class="config-label">WebUI 账号：</span><input type="text" id="env-webui-username" placeholder="留空则不限制账号"></div>
+                <div class="config-row" style="margin-bottom: 30px;"><span class="config-label">WebUI 密码：</span><input type="password" id="env-webui-password" placeholder="留空免密访问"></div>
+                
+                <button onclick="saveEnvData(this)" class="danger-btn" style="width: 100%; font-size: 15px; padding: 12px;">保存配置并热重启</button>
+            </div>
+        </div>
+
+        <div id="character" class="tab-pane">
+            <div class="panel">
+                <h3>外挂角色卡编辑与切换</h3>
+                <div class="config-row"><span class="config-label" style="width: auto;">选择角色：</span><select id="prompt-file-selector" onchange="loadSpecificPrompt()"><option>加载中...</option></select></div>
+                <div class="action-btn-group" style="margin-bottom: 15px;"><button onclick="setActivePrompt()" style="background-color: var(--success);">设为生效</button><button onclick="createNewPrompt()" style="background-color: #555;">新建</button><button onclick="deletePrompt()" class="danger-btn">删除</button></div>
+                <div id="prompt-active-status" style="margin-bottom: 10px; color: var(--warning); font-weight: bold; font-size: 13px;"></div>
+                <textarea id="prompt-editor" style="height: 450px; border-radius: 8px; font-family: -apple-system, sans-serif;">加载中...</textarea>
+                <div style="margin-top: 15px;"><button onclick="savePrompt()" style="width: 100%;">保存内容</button></div>
+            </div>
+        </div>
+        
+        <div id="memory" class="tab-pane">
+            <div class="panel" style="margin-bottom: 15px; padding: 15px 24px;">
+                <div class="config-row" style="margin-bottom: 0;">
+                    <span class="config-label" style="width: auto;">当前查看与管理的记忆归属角色：</span>
+                    <select id="memory-char-selector" onchange="loadMemory()"><option>加载中...</option></select>
+                </div>
+            </div>
+            <div class="flex-container">
+                <div class="panel flex-child"><h3>核心记忆 (永久潜意识)</h3><textarea id="core-mem-editor" style="height: 350px;"></textarea><div class="action-btn-group"><button onclick="saveCoreMemory()" style="width: 100%;">保存</button></div></div>
+                <div class="panel flex-child"><h3>短期上下文 (容量池)</h3><textarea id="short-mem-editor" style="height: 350px;"></textarea><div class="action-btn-group"><button onclick="saveShortMemory()">覆盖</button><button onclick="triggerSummary(this)" class="warning-btn">整理</button><button onclick="clearShortMemory()" class="danger-btn">清空</button></div></div>
+                <div class="panel flex-child"><h3>长期记忆档案 (流水账)</h3><textarea id="long-mem-viewer" style="height: 350px; background-color: #111;" readonly></textarea><button onclick="clearLongMemory()" class="danger-btn" style="margin-top: 10px; width: 100%;">清空长期档案</button></div>
+            </div>
+        </div>
+        
+        <div id="git_sync" class="tab-pane">
+            <div class="panel">
+                <h3>代码云同步与灾备回滚</h3>
+                
+                <div class="config-row" style="margin-top: 15px;">
+                    <span class="config-label" style="color: #007acc;">GitHub 用户名：</span>
+                    <input type="text" id="env-github-username" placeholder="如: ansekafei">
+                </div>
+                <div class="config-row">
+                    <span class="config-label" style="color: #007acc;">GitHub 密钥 (Token)：</span>
+                    <input type="password" id="env-github-token" placeholder="输入 Classic 或 Fine-grained Token">
+                </div>
+                <div class="config-row">
+                    <span class="config-label" style="color: #007acc;">仓库地址：</span>
+                    <input type="text" id="env-github-repo" placeholder="如: ansekafei/QQ-bot">
+                </div>
+                <div class="config-row" style="margin-top: 15px; margin-bottom: 25px;">
+                    <span class="config-label" style="color: var(--warning);">Git 同步代理 (可选)：</span>
+                    <input type="text" id="env-git-proxy" placeholder="如 http://172.25.0.1:7890">
+                </div>
+                <button onclick="saveEnvData(this)" style="margin-bottom: 30px;">💾 保存账号凭证配置</button>
+
+                <h3 style="margin-top: 20px;">日常迭代与自动备份 (main 分支)</h3>
+                <div class="alert-box" style="margin-bottom: 15px;">此按钮用于您每天改完代码、修完 Bug 后的例行云端备份。系统会将所有修改存入 `main` (主) 分支。</div>
+                <div class="config-row" style="margin-bottom: 15px;">
+                    <span class="config-label">更新日志 (Commit)：</span>
+                    <input type="text" id="git-commit-msg" placeholder="例如：修复了记忆模块的 Bug，优化了提示词">
+                </div>
+                <button onclick="triggerGit('push', this)" style="background-color: #007acc; padding: 12px 20px; font-size: 15px; margin-bottom: 35px; width: 100%;">☁️ 提交更改并同步至云端 (迭代版)</button>
+
+                <h3 style="margin-top: 20px; color: var(--success); border-bottom-color: var(--success);">发布完美稳定版 (stable 分支)</h3>
+                <div class="alert-box" style="background-color: rgba(40, 167, 69, 0.1); border-left-color: var(--success); color: #81c784; margin-bottom: 15px;">
+                    当您觉得当前代码运行完美、毫无 Bug 时，点击下方按钮。这会将您此刻的本地代码永久标记并独立存档到 GitHub 的 `stable` 专属分支中！
+                </div>
+                <button onclick="triggerGit('publish', this)" style="background-color: var(--success); padding: 12px 20px; font-size: 15px; margin-bottom: 35px; width: 100%;">🏷️ 将当前代码发布为云端稳定版 (Push to Stable)</button>
+
+                <h3 style="margin-top: 20px; color: var(--danger); border-bottom-color: var(--danger);">灾难救援与版本覆盖</h3>
+                <div class="alert-box" style="background-color: rgba(211, 47, 47, 0.1); border-left-color: var(--danger); color: #ff8a80;">
+                    当代码被改得彻底崩溃无法挽回时，您可以在此强制回滚。
+                </div>
+                <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                    <button onclick="triggerGit('restore', this)" class="warning-btn" style="padding: 12px 20px; font-size: 15px; flex: 1; margin-left: 0;">⏪ 从云端稳定版恢复 (覆盖本地洗牌)</button>
+                    <button onclick="triggerGit('rollback', this)" class="danger-btn" style="padding: 12px 20px; font-size: 15px; flex: 1; margin-left: 0;">⏪ 撤销本地未同步的修改 (退回上一步)</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

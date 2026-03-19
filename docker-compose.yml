@@ -1,0 +1,47 @@
+# docker-compose.yml
+services:
+  ansekafei_bot:
+    build: .
+    container_name: bot
+    # Docker 原生守护：遇到容器彻底死掉时，最多重启 3 次
+    # (但现在的内部热重启由 init.py 接管，容器本身不需要频繁重启了)
+    restart: on-failure:3
+    ports:
+      # 宿主机 5101 映射到 容器内 5001 (FastAPI/应急 WebUI 控制台)
+      - "5101:5001"
+    
+    environment:
+      - TZ=Asia/Shanghai
+      
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      
+    volumes:
+      - .:/app
+      - /tmp/bot:/app/tmp
+    networks:
+      - ai-net
+      
+    # 🌟 核心修改：容器入口改为守护进程 init.py
+    command: >
+      bash -c "pip install --no-cache-dir -r requirements.txt && python -u init.py"
+
+  # ======= NapCatQQ 核心通信服务 =======
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: napcat
+    restart: always
+    environment:
+      - ACCOUNT= 
+    ports:
+      - "5102:3001" 
+      - "5103:6099" 
+    volumes:
+      - ./napcat_data/config:/app/napcat/config
+      - ./napcat_data/qq_cache:/app/.config/QQ
+    networks:
+      - ai-net
+
+networks:
+  ai-net:
+    external: true

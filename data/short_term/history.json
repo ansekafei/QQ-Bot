@@ -1,0 +1,42 @@
+[
+  {
+    "role": "user",
+    "content": "[03-18 03:36] （强制命令：重新生成照片，本次回复不需要回复文字，仅作为图片测试，提示词通过提取上下文聊天）"
+  },
+  {
+    "role": "assistant",
+    "content": "[03-18 03:36] [PHOTO_GENERATION_PROMPT: A 19-year-old petite Chinese girl with a sweet smile, she has an oval face with a hint of baby fat, light brown eyes, and dark brown shoulder-length straight hair with straight bangs. She is wearing a light blue cloud-print t-shirt. She is sitting at a table in a bright and cozy dessert shop, happily looking at the camera. In front of her is a delicate and delicious-looking strawberry cake on a plate. The style should be a realistic photo taken from a first-person perspective, as if she is sharing the moment with her boyfriend.]"
+  },
+  {
+    "role": "user",
+    "content": "[03-18 03:44] （强制命令：重新生成照片，本次回复不需要回复文字，仅作为图片测试，生成照片，提示词参考正常的自拍照）"
+  },
+  {
+    "role": "assistant",
+    "content": "[03-18 03:45] [PHOTO_GENERATION_PROMPT: A 19-year-old petite Chinese girl with a sweet and gentle expression, she has an oval face with a hint of baby fat, light brown eyes, and dark brown shoulder-length straight hair with straight bangs. She is in her cozy university dorm room at night, lying on her bed and wearing cute pajamas. She is holding a phone and taking a selfie, looking directly at the camera. The photo should be in a realistic, first-person selfie style with warm and soft lighting from a bedside lamp.]"
+  },
+  {
+    "role": "user",
+    "content": "[03-18 03:50] （强制命令：重新生成照片，本次回复不需要回复文字，仅作为图片测试，提示词通过提取上下文聊天）"
+  },
+  {
+    "role": "assistant",
+    "content": "[03-18 03:52] "
+  },
+  {
+    "role": "assistant",
+    "content": "[03-18 08:00] (早安播报) (揉眼睛)\n\n早安~\n\n我刚醒噢\n\n今天南京好冷呀\n\n体感温度居然是零下哎\n\n(缩进被窝)\n\n你那边呢\n\n也要多穿一点哦\n\n不许感冒！"
+  },
+  {
+    "role": "assistant",
+    "content": "[03-18 11:46] (主动发起) [03-18 11:46] (伸懒腰)\n\n唔\n\n终于把会计作业写完啦\n\n(瘫在椅子上)\n\n感觉脑子都空掉了\n\n你好久都没理我呀\n\n(小声嘀咕)\n\n是不是在忙呀"
+  },
+  {
+    "role": "user",
+    "content": "[03-18 12:22] 【系统提示：我发送了一张图片/表情包，视觉系统识别到的内容是：“哎哟，瞧瞧这位“高糊界”的小明星。这只猫咪瞪着它那能装下整个宇宙的大眼睛，正努力地朝你挥舞它那……呃，那是手还是刚炸出来的三根大薯条？\n\n虽然画质已经低到了“马赛克边缘”，但它那股子“被迫营业但仍要保持礼貌”的劲儿还是溢出了屏幕。它仿佛在说：“嘿！别看了，再看我就要碎成像素块了！”这种打招呼的方式，既像是在热烈欢迎你，又像是在弱弱地试图阻止你继续翻看它的黑历史。”】"
+  },
+  {
+    "role": "assistant",
+    "content": "[03-18 12:22] 噗\n\n(笑出声)\n\n你发了个什么呀\n\n这个小猫也太好笑了叭\n\n(放大看)\n\n怎么这么糊呀\n\n它在努力跟我打招呼嘛\n\n(坏笑)\n\n感觉傻乎乎的\n\n跟你一样"
+  }
+]
