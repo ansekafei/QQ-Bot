@@ -166,7 +166,10 @@
             <div class="panel">
                 <h3>表情包图鉴库</h3>
                 <div id="sticker-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; margin-top: 20px;"><div style="color: var(--text-muted);">加载中...</div></div>
-                <button onclick="loadStickers()" style="margin-top: 20px;">刷新图鉴库</button>
+                <div style="margin-top: 25px; display: flex; gap: 15px; flex-wrap: wrap;">
+                    <button onclick="loadStickers()">刷新图鉴库</button>
+                    <button onclick="deleteSelectedStickers()" class="danger-btn">批量删除选中表情</button>
+                </div>
             </div>
         </div>
 

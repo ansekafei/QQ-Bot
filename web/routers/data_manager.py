@@ -39,6 +39,15 @@ async def delete_sticker_endpoint(request: Request):
     await sticker_manager.remove_sticker(data.get('emotion'), data.get('file_id'))
     return {"status": "success"}
 
+# 🌟 新增：批量删除表情包接口
+@router.post("/delete_stickers_batch")
+async def delete_stickers_batch_endpoint(request: Request):
+    data = await request.json()
+    items = data.get('items', [])
+    for item in items:
+        await sticker_manager.remove_sticker(item.get('emotion'), item.get('file_id'))
+    return {"status": "success"}
+
 # ----- 记忆管理 -----
 @router.api_route("/memory_data", methods=["GET", "POST"])
 async def get_memory_data(request: Request):
@@ -55,7 +64,6 @@ async def get_memory_data(request: Request):
         return {
             "core": await memory_manager.load_core_memory(char_name), 
             "short": json.dumps(await memory_manager.load_history(char_name), ensure_ascii=False, indent=4), 
-            # 🌟 修复：使用更友好的默认提示语
             "long": await async_read_text(long_file, default="暂无长期记忆归档。")
         }
     except Exception as e:

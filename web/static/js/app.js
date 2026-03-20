@@ -295,6 +295,13 @@ async function deletePrompt() {
     }
 }
 
+// 🌟 新增：表情包全选联动逻辑
+function toggleEmotionSelect(headerCheckbox, emotion) {
+    const checkboxes = document.querySelectorAll(`.sticker-checkbox[data-emotion="${emotion}"]`);
+    checkboxes.forEach(cb => cb.checked = headerCheckbox.checked);
+}
+
+// 🌟 修改：注入复选框到 DOM
 async function loadStickers() {
     try {
         const data = await safeFetch('/stickers_data');
@@ -304,13 +311,27 @@ async function loadStickers() {
             if (ids.length === 0) continue;
             total += ids.length;
             let html = `<div style="background: var(--bg-dark); border: 1px solid var(--border-color); padding: 15px; border-radius: 8px;">`;
-            html += `<h4 style="margin-top: 0; margin-bottom: 12px; color: var(--warning); display:flex; justify-content:space-between;">${emotion} <span style="color: var(--text-muted); font-size: 13px;">${ids.length} 张</span></h4>`;
+            
+            // 加入全选复选框
+            html += `<h4 style="margin-top: 0; margin-bottom: 12px; color: var(--warning); display:flex; justify-content:space-between; align-items:center;">
+                        <span>${emotion} <span style="color: var(--text-muted); font-size: 13px;">${ids.length} 张</span></span>
+                        <label style="font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; color: var(--text-main); font-weight: normal;">
+                            <input type="checkbox" onclick="toggleEmotionSelect(this, '${emotion}')" style="width: 14px; height: 14px;"> 全选
+                        </label>
+                     </h4>`;
+                     
             html += `<ul style="list-style: none; padding: 0; margin: 0;">`;
             ids.forEach(item => {
                 const parts = item.split('|'); const id = parts[0]; const extra = parts.length > 1 ? parts[1] : '';
                 let previewHtml = extra.startsWith('http') ? `<img src="${extra}" referrerpolicy="no-referrer" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px; border: 1px solid #444;" onclick="window.open('${extra}')">` : `<span style="font-size: 20px; width: 40px; display: inline-block; text-align: center;">${extra}</span>`;
+                
+                // 加入单个复选框
                 html += `<li style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #333; padding: 8px 0;">
-                            <div style="display: flex; align-items: center; gap: 10px;">${previewHtml}<span title="${id}" style="font-size: 12px; color: #777; font-family: var(--font-mono);">${id.substring(0, 8)}...</span></div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" class="sticker-checkbox" data-emotion="${emotion}" data-item="${item}" style="width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; margin: 0;">
+                                ${previewHtml}
+                                <span title="${id}" style="font-size: 12px; color: #777; font-family: var(--font-mono);">${id.substring(0, 8)}...</span>
+                            </div>
                             <button onclick="deleteSticker('${emotion}', '${item}')" class="danger-btn" style="padding: 4px 8px; font-size: 12px; border-radius: 4px; margin-left:0; width: auto !important; min-width: unset;">删除</button>
                          </li>`;
             });
@@ -319,10 +340,38 @@ async function loadStickers() {
         if (total === 0) container.innerHTML = `<div style="color: var(--text-muted);">图鉴空空如也，快去发几个表情包学习吧！</div>`;
     } catch (e) {}
 }
+
 async function deleteSticker(emotion, item_string) {
     if(confirm(`确定要把这个从 [${emotion}] 图鉴中删除吗？`)) {
         await safeFetch('/delete_sticker', { method: 'POST', body: JSON.stringify({ emotion: emotion, file_id: item_string }) });
         await loadStickers(); showToast("已移出图鉴");
+    }
+}
+
+// 🌟 新增：批量删除选中请求
+async function deleteSelectedStickers() {
+    const checkboxes = document.querySelectorAll('.sticker-checkbox:checked');
+    if (checkboxes.length === 0) {
+        showToast("请先勾选要删除的表情包", "warning");
+        return;
+    }
+    
+    if (confirm(`确定要彻底删除选中的 ${checkboxes.length} 个表情包吗？`)) {
+        const itemsToDelete = Array.from(checkboxes).map(cb => ({
+            emotion: cb.getAttribute('data-emotion'),
+            file_id: cb.getAttribute('data-item')
+        }));
+
+        try {
+            await safeFetch('/delete_stickers_batch', {
+                method: 'POST',
+                body: JSON.stringify({ items: itemsToDelete })
+            });
+            showToast(`成功批量删除 ${checkboxes.length} 个表情包`, "success");
+            await loadStickers();
+        } catch (e) {
+            // safeFetch 内部已经处理了 Toast 弹窗
+        }
     }
 }
 
@@ -578,7 +627,6 @@ async function clearLongMemory() {
     }
 }
 
-// 🌟 核心：为新的灾备按钮挂载对应的触发逻辑
 async function triggerGit(action, btnElement) {
     let confirmMsg = "";
     let endpoint = "";
