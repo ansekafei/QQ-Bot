@@ -5,10 +5,19 @@ from core.logger import logger
 from bot.memory_manager import memory_manager
 from core.config import cfg
 
+# 🌟 折中修复 1：全局总结锁，绝对防并发防踩踏
+_is_summarizing = False
+
 async def summarize_memory_async():
-    logger.info("🧠 [记忆系统] 触发短期记忆总结机制，正在整理并提炼核心记忆...")
+    global _is_summarizing
     
+    if _is_summarizing:
+        logger.info("⏳ [记忆系统] 另一个记忆总结任务正在运行，已跳过防踩踏...")
+        return False, "正在总结中"
+        
+    _is_summarizing = True
     try:
+        logger.info("🧠 [记忆系统] 触发短期记忆总结机制，正在整理并提炼核心记忆...")
         from bot.brain import brain
         client = brain.get_client()
         
@@ -32,7 +41,7 @@ async def summarize_memory_async():
             "2. ⏳ 动态事件清理（高优先级）：对于旧记忆中约定的事情、计划或临时状态（如生病、出差），请严格对照我提供的【当前系统时间】。如果某个事件的时间节点已经过去、或者事件已经完成，请直接从记忆中将其彻底删除，不要保留任何痕迹！\n"
             "3. 抛弃无用的废话：日常的问候、语气词、表情包、无关紧要的闲聊直接丢弃。\n"
             "4. 融合冲突：如果有冲突（比如用户改名了），以新聊天记录为准。\n"
-            "5. 视角与格式：请使用简明扼要的客观陈述句（类似人物设定集或维基百科的条目），绝对不要用第一人称写日记！不要有任何开场白或 markdown 标记，直接输出最终更新后的完整记忆文本！"
+            "5. 视角与格式：请使用简明扼要的客观陈述句，绝对不要用第一人称写日记！不要有任何开场白或 markdown 标记，直接输出最终更新后的完整记忆文本！"
         )
         
         user_prompt = (
@@ -54,9 +63,7 @@ async def summarize_memory_async():
         new_core_memory = response.choices[0].message.content.strip()
         new_core_memory = new_core_memory.replace('```json', '').replace('```text', '').replace('```', '').strip()
         
-        # 🌟 核心修复：保存核心记忆后，不直接清空，而是保留最后 20 条，防止当前话题突然失忆
         await memory_manager.save_core_memory(new_core_memory)
-        
         retain_history = history[-20:] if len(history) > 20 else []
         async with memory_manager._lock:
             await memory_manager.save_history(retain_history) 
@@ -67,3 +74,6 @@ async def summarize_memory_async():
     except Exception as e:
         logger.error(f"❌ [记忆系统] 总结执行失败: {e}")
         return False, f"总结失败: {str(e)}"
+    finally:
+        # 🌟 无论 API 是否超时报错崩溃，最终一定释放锁，防止永久失忆
+        _is_summarizing = False

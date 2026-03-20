@@ -11,7 +11,6 @@ from core.logger import logger
 
 class MemoryManager:
     def __init__(self):
-        # 🌟 核心修复：引入异步读写锁，防止高频聊天时记忆文件读写冲突导致丢包
         self._lock = asyncio.Lock()
         
     def _get_char_dir(self, char_name=None):
@@ -35,14 +34,12 @@ class MemoryManager:
 
         prompt_file = os.path.join(char_dir, "prompt.txt")
         old_prompt_file = os.path.join("data", "prompts", f"{os.path.basename(char_dir)}.txt")
-        
         if not os.path.exists(prompt_file) and os.path.exists(old_prompt_file):
             try: shutil.move(old_prompt_file, prompt_file)
             except Exception: pass
             
         old_core = "data/core_memory.txt"
         old_short = "data/short_term/history.json"
-        
         if not os.path.exists(core_file) and os.path.exists(old_core):
             try: shutil.move(old_core, core_file)
             except Exception: pass
@@ -81,7 +78,7 @@ class MemoryManager:
         await async_write_text(short_file, json.dumps(history_list, ensure_ascii=False, indent=4))
 
     async def append_memory(self, role: str, content: str, char_name=None):
-        async with self._lock:  # 保护读写过程
+        async with self._lock: 
             history = await self.load_history(char_name)
             history.append({"role": role, "content": content})
             if len(history) > 120:
