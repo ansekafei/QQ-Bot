@@ -10,6 +10,9 @@ from bot.memory_manager import memory_manager
 from tasks.schedule_manager import schedule_manager
 from bot.tools.tool_manager import execute_search, get_tool_prompt
 
+# 🌟 引入刚刚分离的裁判引擎
+from bot.judges.proactive_judge import build_proactive_prompt, build_morning_greeting_prompt
+
 class ProactiveManager:
     def __init__(self):
         self.last_interaction_time = datetime.now()
@@ -90,12 +93,8 @@ class ProactiveManager:
         
         dynamic_system_prompt += get_tool_prompt()
 
-        proactive_instruction = (
-            f"\n\n【系统强制指令】：距离上次我们聊天已经过去了大约 {hours_passed:.1f} 小时。"
-            "请先回顾历史记录！如果最后一条是我发给你的，请你务必先温柔地回应，并解释一下刚才去干嘛了！\n"
-            "如果之前没有遗留消息，请主动开启新话题或问候，务必严格参考你的【今日日记参考(时间轴)】来描述你现在的状态。语气要自然，完全使用纯正中文！绝对不要编造日程表上没有的安排。"
-        )
-        dynamic_system_prompt += proactive_instruction
+        # 🌟 动态获取搭话指令
+        dynamic_system_prompt += build_proactive_prompt(hours_passed)
 
         current_history = await memory_manager.load_history()
         messages_to_send = [{"role": "system", "content": dynamic_system_prompt}] + current_history
@@ -112,7 +111,7 @@ class ProactiveManager:
             clean_reply = re.sub(r'\[表情包:.*?\]', '', reply).strip()
             clean_reply = re.sub(r'\[RECORD_PROMISE:.*?\]', '', clean_reply).strip()
 
-            reply_time_stamp = datetime.now().strftime("[%m-%d %H:%M]")
+            reply_time_stamp = datetime.now().strftime("[%Y-%m-%d %H:%M]")
             await memory_manager.append_memory("assistant", f"{reply_time_stamp} (主动发起) {clean_reply}")
             
             paragraphs = re.split(r'\n+', clean_reply)
@@ -171,11 +170,8 @@ class ProactiveManager:
             if fresh_schedule:
                 dynamic_system_prompt += f"\n\n【今日日记参考(时间轴)】\n{fresh_schedule}"
             
-            instruction = (
-                f"\n\n【系统后台数据注入】：以下是系统刚才为你查到的今日天气状况：\n{search_result}\n\n"
-                "【系统强制指令】：现在是你刚起床的时间！请根据天气数据，严格结合上面的【今日日记参考(时间轴)】，主动发早安。切记：绝对不要编造时间轴上没有的安排（如果你今天不上课，绝对不能说去上课）！"
-            )
-            dynamic_system_prompt += instruction
+            # 🌟 动态获取早安问候指令
+            dynamic_system_prompt += build_morning_greeting_prompt(search_result)
 
             client = brain.get_client()
             try:
@@ -187,9 +183,8 @@ class ProactiveManager:
                 reply = response.choices[0].message.content
                 clean_reply = re.sub(r'\[.*?\]', '', reply).strip()
                 
-                await memory_manager.append_memory("assistant", f"[{datetime.now().strftime('%m-%d %H:%M')}] (早安播报) {clean_reply}")
+                await memory_manager.append_memory("assistant", f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] (早安播报) {clean_reply}")
                 
-                # 🚀 修复核心：将早安播报的大段文字按换行符拆分，变成多条气泡，配合打字延迟发送
                 paragraphs = re.split(r'\n+', clean_reply)
                 for para in paragraphs:
                     para = para.strip()

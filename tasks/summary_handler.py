@@ -4,8 +4,9 @@ from datetime import datetime
 from core.logger import logger
 from bot.memory_manager import memory_manager
 from core.config import cfg
+from bot.judges.memory_judge import build_summary_prompt
 
-# 🌟 折中修复 1：全局总结锁，绝对防并发防踩踏
+# 🌟 修复保留项：全局总结锁，绝对防并发防踩踏
 _is_summarizing = False
 
 async def summarize_memory_async():
@@ -31,25 +32,11 @@ async def summarize_memory_async():
             
         history_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
         current_time_str = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
-        summary_model = cfg.get("summary_model")
         
-        sys_prompt = (
-            "你是一个机器人的“后台记忆整理大脑”。\n"
-            "你的任务是阅读用户与角色最近的聊天记录，并将其提炼浓缩，更新角色的【核心记忆档案】。\n\n"
-            "【总结规则】：\n"
-            "1. 提取核心事实：用户的喜好、习惯、名字、职业等永久性信息，请保留并不断完善。\n"
-            "2. ⏳ 动态事件清理（高优先级）：对于旧记忆中约定的事情、计划或临时状态（如生病、出差），请严格对照我提供的【当前系统时间】。如果某个事件的时间节点已经过去、或者事件已经完成，请直接从记忆中将其彻底删除，不要保留任何痕迹！\n"
-            "3. 抛弃无用的废话：日常的问候、语气词、表情包、无关紧要的闲聊直接丢弃。\n"
-            "4. 融合冲突：如果有冲突（比如用户改名了），以新聊天记录为准。\n"
-            "5. 视角与格式：请使用简明扼要的客观陈述句，绝对不要用第一人称写日记！不要有任何开场白或 markdown 标记，直接输出最终更新后的完整记忆文本！"
-        )
-        
-        user_prompt = (
-            f"【当前系统时间】：{current_time_str}\n\n"
-            f"【旧的核心记忆】：\n{old_core_memory if old_core_memory else '无'}\n\n"
-            f"【本次需要总结的新聊天记录】：\n{history_text}"
-        )
+        # 🌟 直接向裁判所请求 Prompt
+        sys_prompt, user_prompt = build_summary_prompt(current_time_str, old_core_memory, history_text)
 
+        summary_model = cfg.get("summary_model")
         response = await client.chat.completions.create(
             model=summary_model,
             messages=[
@@ -75,5 +62,4 @@ async def summarize_memory_async():
         logger.error(f"❌ [记忆系统] 总结执行失败: {e}")
         return False, f"总结失败: {str(e)}"
     finally:
-        # 🌟 无论 API 是否超时报错崩溃，最终一定释放锁，防止永久失忆
         _is_summarizing = False

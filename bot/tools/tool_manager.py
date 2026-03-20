@@ -7,6 +7,7 @@ import hashlib
 from core.config import cfg
 from core.logger import logger
 from core.file_io import async_read_text, async_write_text
+from bot.judges.tool_judge import get_integrated_tools_prompt
 
 CACHE_DIR = "/tmp/bot/search_cache"
 CACHE_EXPIRY_DAYS = 7
@@ -27,10 +28,8 @@ def _clean_old_cache():
                 except Exception: pass
 
 def get_tool_prompt() -> str:
-    return (
-        "\n\n【搜索引擎能力】：如果用户询问了客观事实、实时新闻、天气或者你不知道的知识，你可以输出 `[SEARCH:你要搜索的关键词]`。系统会自动为你检索并把结果返回给你。"
-        "\n⚠️ 极其重要的生存警告：系统的搜索结果会固定缓存 7 天！如果你要查询【今天的天气】、【今天的新闻】等对时间极其敏感的时效性内容，你必须在搜索关键词中强行加入当前日期！（例如：`[SEARCH:2026年3月20日 南京天气]`），否则你查到的永远是几天前的过期信息！"
-    )
+    # 🌟 将获取能力说明的职责转移给 tool_judge
+    return get_integrated_tools_prompt()
 
 async def execute_search(query: str, ignore_limit=False) -> str:
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -57,9 +56,8 @@ async def execute_search(query: str, ignore_limit=False) -> str:
     logger.info(f"🔍 [联网搜索] 🌐 正在通过 API 全网检索: {query}")
     
     try:
-        # 🌟 核心修改：移除 proxy 传入，直接通过 NAS 网络直连 SerpApi
         async with httpx.AsyncClient(timeout=20.0) as client:
-            resp = await client.get("https://serpapi.com/search.json", params={
+            resp = await client.get("[https://serpapi.com/search.json](https://serpapi.com/search.json)", params={
                 "q": query, "api_key": api_key, "engine": "google", "hl": "zh-cn", "gl": "cn"
             })
             if resp.status_code != 200:
