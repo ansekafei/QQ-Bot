@@ -1,0 +1,6 @@
+{
+    "name": "Bot",
+    "entrypoint": "main.py",
+    "memory": 512,
+    "github_repo": "https://github.com/ansekafei/QQ-Bot.git"
+}
