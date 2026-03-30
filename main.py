@@ -99,13 +99,21 @@ async def web_ui():
                             <label class="block text-xs font-bold text-slate-500 mb-1">NapCat Token</label>
                             <input type="password" id="sys-token" value="{token}" class="w-full border border-slate-300 rounded p-2 text-sm font-mono focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="Bearer token">
                         </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 mb-1">大模型 API Base (网
-                                💾 保存系统配置 (需重启生效)
-                            </button>
-                        </div>
-                    </div>
-                </div>
+        <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">大模型 API Base (网关地址)</label>
+            <input type="text" id="sys-api-base" value="{api_base}" class="w-full border border-slate-300 rounded p-2 text-sm font-mono focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="http://192.168.x.x:8000/v1">
+        </div>
+        <div>
+            <label class="block text-xs font-bold text-slate-500 mb-1">大模型 API Key</label>
+            <input type="password" id="sys-api-key" value="{api_key}" class="w-full border border-slate-300 rounded p-2 text-sm font-mono focus:ring-2 focus:ring-indigo-300 outline-none" placeholder="sk-...">
+        </div>
+        <div class="pt-2">
+            <button onclick="saveSystemConfig()" id="btn-sys" class="w-full py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold rounded shadow transition-colors">
+                💾 保存系统配置 (需重启生效)
+            </button>
+        </div>
+    </div>
+</div>
 
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                     <h2 class="font-bold text-slate-700 mb-4 flex items-center border-b pb-2">
@@ -148,6 +156,7 @@ async def web_ui():
                 
                 const payload = {{
                     napcat_ws_url: document.getElementById('sys-ws').value.trim(),
+                    napcat_token: document.getElementById('sys-token').value.trim(),
                     llm_api_base: document.getElementById('sys-api-base').value.trim(),
                     llm_api_key: document.getElementById('sys-api-key').value.trim()
                 }};
@@ -220,6 +229,8 @@ async def update_system_config(request: Request):
     try:
         if "napcat_ws_url" in data:
             set_key(ENV_FILE, "NAPCAT_WS_URL", data["napcat_ws_url"])
+        if "napcat_token" in data:
+            set_key(ENV_FILE, "NAPCAT_TOKEN", data["napcat_token"])
         if "llm_api_base" in data:
             set_key(ENV_FILE, "LLM_API_BASE", data["llm_api_base"])
         if "llm_api_key" in data:
